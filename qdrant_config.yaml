@@ -3,6 +3,11 @@
 # Paths are absolute container paths; the same file works for the
 # native binary install if you swap them for host paths.
 
+# NOTE on paths: this config targets the NATIVE binary install at
+# /opt/qdrant/. For the Docker install the container runs as the qdrant
+# user with /qdrant/storage mounted from a named volume; set
+# QDRANT__STORAGE__STORAGE_PATH=/qdrant/storage in docker-compose env
+# to point the in-container binary at the same storage area.
 service:
   host: 0.0.0.0
   http_port: 6333
@@ -12,7 +17,7 @@ service:
   max_workers: 0  # 0 = use available CPU count
 
 storage:
-  storage_path: /qdrant/storage
+  storage_path: /opt/qdrant/storage
   snapshots_path: /qdrant/snapshots
   # Keep the last 3 snapshots per collection.
   snapshots_config:
@@ -35,7 +40,7 @@ collection_defaults:
     ef_construct: 100
     full_scan_threshold: 10000
   optimizer_config:
-    indexing_threshold: 20000
+    indexing_threshold: 2000
     memmap_threshold: null  # let Qdrant decide
   quantization_config:
     scalar:

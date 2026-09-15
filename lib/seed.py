@@ -1,16 +1,47 @@
 #!/usr/bin/env python3
-"""data-layer-qdrant/lib/seed.py — idempotent seeder for source-authority docs.
+"""data-layer-qdrant/lib/seed.py - idempotent seeder for source-authority docs.
 
-For each row in the CSV:
-- skip if do_not_ingest_y_n == 'Y'
-- skip if sha256 missing/too short
-- payload.lifecycle_status = 'superseded' if superseded_y_n == 'Y'
-- point ID = md5(sha256).hexdigest()  (deterministic; same row -> same point)
-- vector = [0.0] * 768 (placeholder until embed-on-demand attaches real vectors)
+Reads a CSV where each row has sha256, do_not_ingest_y_n, superseded_y_n
+plus the source-authority columns. For each row:
+  * skip if do_not_ingest_y_n == 'Y'
+  * skip if sha256 missing/too short
+  * payload.lifecycle_status = 'superseded' if superseded_y_n == 'Y',
+    else 'active'
+  * point ID = md5(sha256).hexdigest() (deterministic; same row -> same point)
+  * vector = [0.0] * vector_dim (placeholder until embed-on-demand
+    attaches real vectors)
 
 Idempotent on re-run (same rows -> same points, no duplicates).
+
+After a successful run, writes a small JSON marker file at
+DATA_LAYER_QDRANT_INGEST_MARKER (default
+/opt/qdrant/state/last_ingest.json) so the MCP rag.ingest.status
+tool can report what the last seed actually did. The marker write
+is best-effort: failures are logged but do NOT abort the seed.
 """
-import argparse, csv, hashlib, json, sys, urllib.request, urllib.error
+import argparse
+import csv
+import datetime
+import hashlib
+import json
+import os
+import sys
+import time
+import urllib.error
+import urllib.request
+
+
+PAYLOAD_FIELDS = [
+    "relative_path", "source_id", "source_family", "authority_class",
+    "lifecycle_status", "governing_y_n", "reference_only_y_n",
+    "superseded_y_n", "do_not_ingest_y_n",
+    "proposed_retrieval_eligibility", "proposal_basis", "human_decision", "notes",
+]
+
+DEFAULT_MARKER_PATH = os.environ.get(
+    "DATA_LAYER_QDRANT_INGEST_MARKER",
+    "/opt/qdrant/state/last_ingest.json",
+)
 
 
 def http(method, url, payload=None, timeout=60):
@@ -22,12 +53,17 @@ def http(method, url, payload=None, timeout=60):
         return r.status, json.loads(body) if body else None
 
 
-PAYLOAD_FIELDS = [
-    "relative_path", "source_id", "source_family", "authority_class",
-    "lifecycle_status", "governing_y_n", "reference_only_y_n",
-    "superseded_y_n", "do_not_ingest_y_n",
-    "proposed_retrieval_eligibility", "proposal_basis", "human_decision", "notes",
-]
+def write_marker(marker_path, summary):
+    try:
+        marker_dir = os.path.dirname(marker_path)
+        if marker_dir and not os.path.isdir(marker_dir):
+            os.makedirs(marker_dir, exist_ok=True)
+        with open(marker_path, "w", encoding="utf-8") as fh:
+            json.dump(summary, fh, indent=2, sort_keys=True)
+        print("marker written: " + marker_path)
+    except OSError as e:
+        # Don't fail the seed for an observability marker write.
+        print("marker write skipped: " + type(e).__name__ + ": " + str(e))
 
 
 def main():
@@ -37,11 +73,36 @@ def main():
     ap.add_argument("--collection", required=True)
     ap.add_argument("--batch-size", type=int, default=64)
     ap.add_argument("--vector-dim", type=int, default=768)
+    ap.add_argument(
+        "--marker-path",
+        default=DEFAULT_MARKER_PATH,
+        help=(
+            "Path to the JSON marker file the MCP rag.ingest.status tool "
+            "reads. Default: $DATA_LAYER_QDRANT_INGEST_MARKER or "
+            "/opt/qdrant/state/last_ingest.json"
+        ),
+    )
+    ap.add_argument(
+        "--wait",
+        choices=("true", "false"),
+        default="true",
+        help=(
+            "Pass '?wait=true' to qdrant PUT: blocks until the server "
+            "has indexed the batch (slower but deterministic counts). "
+            "Default true. Use false only for fast bulk ingest where "
+            "imprecise point-count timing is acceptable."
+        ),
+    )
     args = ap.parse_args()
 
-    put_url = f"{args.url.rstrip('/')}/collections/{args.collection}/points?wait=false"
+    put_url = (
+        args.url.rstrip("/")
+        + "/collections/" + args.collection
+        + "/points?wait=" + args.wait
+    )
     uploaded, skipped, batches = 0, 0, 0
     batch = []
+    started_at = time.time()
 
     with open(args.csv, encoding="utf-8-sig", newline="") as f:
         reader = csv.DictReader(f)
@@ -56,21 +117,45 @@ def main():
             sup = (row.get("superseded_y_n") or "").strip().upper() == "Y"
             payload = {k: (row.get(k) or "") for k in PAYLOAD_FIELDS}
             payload["lifecycle_status"] = "superseded" if sup else "active"
-            payload["source_text"] = ((row.get("relative_path") or "") +
-                                  " / " + (row.get("source_family") or ""))
+            payload["source_text"] = (
+                (row.get("relative_path") or "")
+                + " / "
+                + (row.get("source_family") or "")
+            )
             pid = hashlib.md5(sha.encode()).hexdigest()
             vec = [0.0] * args.vector_dim
             batch.append({"id": pid, "vector": vec, "payload": payload})
             uploaded += 1
             if len(batch) >= args.batch_size:
-                code, body = http("PUT", put_url, {"points": batch}, args.batch_size and 60 or 60)
+                http("PUT", put_url, {"points": batch}, timeout=60)
                 batches += 1
                 batch = []
         if batch:
-            http("PUT", put_url, {"points": batch})
+            http("PUT", put_url, {"points": batch}, timeout=60)
             batches += 1
 
-    print(f"uploaded={uploaded} skipped={skipped} batches={batches}")
+    duration_s = round(time.time() - started_at, 3)
+    print(
+        "uploaded=" + str(uploaded)
+        + " skipped=" + str(skipped)
+        + " batches=" + str(batches)
+        + " wait=" + str(args.wait)
+        + " duration_s=" + str(duration_s)
+    )
+
+    # Best-effort marker write so the MCP rag.ingest.status tool can
+    # report the actual last ingest.
+    write_marker(args.marker_path, {
+        "collection": args.collection,
+        "csv": args.csv,
+        "uploaded": uploaded,
+        "skipped": skipped,
+        "batches": batches,
+        "wait": args.wait == "true",
+        "vector_dim": args.vector_dim,
+        "duration_s": duration_s,
+        "timestamp_utc": datetime.datetime.now(datetime.UTC).isoformat().replace("+00:00", "Z") + "Z",
+    })
     return 0
 
 

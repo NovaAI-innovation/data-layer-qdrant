@@ -17,8 +17,14 @@ Usage: $0 <install|verify|status|reset|seed>  [args]
   verify   run tests/smoke.sh + tests/test_collections.py
   status   report mode + version + collections + point counts
   reset    destroy all collections (confirm first)
+  install  bring up Qdrant (docker if available, native binary fallback)
+  verify   run tests/smoke.sh + tests/test_collections.py
+  status   report mode + version + collections + point counts
+  reset    destroy all collections (confirm first)
   seed     idempotently ingest source authority docs from CSV
+  apply-migrations  create collections from migrations/*.json (idempotent)
 USAGE
+
 }
 
 detect_mode() {
@@ -81,6 +87,7 @@ case "${1:-help}" in
   status)  cmd_status ;;
   reset)   cmd_reset ;;
   seed)    cmd_seed ;;
+  apply-migrations) /opt/venv/bin/python "$ROOT/migrations/apply_migrations.py" ;;
   help|--help|-h|"") usage ;;
   *) echo "unknown subcommand: $1" >&2; usage >&2; exit 2 ;;
 esac
