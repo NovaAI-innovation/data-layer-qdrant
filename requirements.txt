@@ -1,0 +1,23 @@
+# data-layer-qdrant — Python runtime dependencies.
+# Tested with Python 3.13.
+#
+# qdrant-client: HTTP + gRPC client for the Qdrant vector store (the
+#   storage backend the MCP calls into).
+# fastembed: lightweight on-device embedding library for Qdrant;
+#   used as the fast-path for prototype embedding-on-demand (the
+#   long-term path is sentence-transformers, below).
+# sentence-transformers: 768-dim embedding model
+#   (sentence-transformers/all-mpnet-base-v2); used by the embedding
+#   pipeline that ingests source-authority documents and emails.
+# pyyaml: migrations/*.json loading (qdrant_config.yaml + per-collection
+#   schema files).
+# requests: optional HTTP client used inside seed.py for batch uploads
+#   (urllib.request is the default; requests is here for tooling).
+# pytest: tests/test_collections.py + future test suite.
+
+qdrant-client>=1.10,<2
+fastembed>=0.4,<1
+sentence-transformers>=3.0,<4
+pyyaml>=6.0,<7
+requests>=2.31,<3
+pytest>=7.0,<9

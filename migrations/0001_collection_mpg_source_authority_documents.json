@@ -1,0 +1,39 @@
+{
+  "collection_name": "mpg_source_authority_documents",
+  "vectors": {
+    "size": 768,
+    "distance": "Cosine"
+  },
+  "payload_schema": {
+    "relative_path": "text",
+    "sha256": "text",
+    "source_id": "text",
+    "source_family": "text",
+    "authority_class": "text",
+    "lifecycle_status": "keyword",
+    "governing_y_n": "keyword",
+    "reference_only_y_n": "keyword",
+    "superseded_y_n": "keyword",
+    "do_not_ingest_y_n": "keyword",
+    "proposed_retrieval_eligibility": "text",
+    "proposal_basis": "text",
+    "human_decision": "text",
+    "notes": "text",
+    "source_text": "text"
+  },
+  "hnsw_config": {
+    "m": 16,
+    "ef_construct": 100,
+    "full_scan_threshold": 10000
+  },
+  "optimizer_config": {
+    "indexing_threshold": 20000
+  },
+  "quantization_config": {
+    "scalar": {
+      "type": "int8",
+      "quantile": 0.99,
+      "always_ram": false
+    }
+  }
+}

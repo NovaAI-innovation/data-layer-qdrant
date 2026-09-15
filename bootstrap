@@ -1,0 +1,86 @@
+#!/usr/bin/env bash
+# data-layer-qdrant/bootstrap — single dispatcher CLI.
+# Subcommands: install | verify | status | reset | seed
+set -euo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
+LIB="$ROOT/lib"
+DSN="${DATA_LAYER_QDRANT_URL:-http://localhost:6333}"
+RUNTIME="${DATA_LAYER_QDRANT_RUNTIME:-auto}"
+
+log()  { printf '[qdrant %s] %s\n' "$(date +%H:%M:%S)" "$*"; }
+fail() { printf '[qdrant FAIL] %s\n' "$*" >&2; exit 3; }
+
+usage() {
+  cat <<USAGE
+Usage: $0 <install|verify|status|reset|seed>  [args]
+  install  bring up Qdrant (docker if available, native binary fallback)
+  verify   run tests/smoke.sh + tests/test_collections.py
+  status   report mode + version + collections + point counts
+  reset    destroy all collections (confirm first)
+  seed     idempotently ingest source authority docs from CSV
+USAGE
+}
+
+detect_mode() {
+  if [ "$RUNTIME" = "docker" ]; then echo "docker"; return; fi
+  if [ "$RUNTIME" = "native" ]; then echo "native"; return; fi
+  if command -v docker >/dev/null 2>&1 && [ -f "$ROOT/../docker-compose.yml" ]; then
+    echo "docker"
+  elif [ -x "/usr/local/bin/qdrant" ]; then
+    echo "native"
+  else
+    echo "none"
+  fi
+}
+
+cmd_install() {
+  local mode
+  mode="$(detect_mode)"
+  case "$mode" in
+    docker) bash "$LIB/install.sh" docker ;;
+    native) bash "$LIB/install.sh" native ;;
+    none)   fail "neither docker nor /usr/local/bin/qdrant; set DATA_LAYER_QDRANT_RUNTIME" ;;
+  esac
+}
+
+cmd_verify() {
+  bash "$ROOT/tests/smoke.sh"
+  /opt/venv/bin/python "$ROOT/tests/test_collections.py" --url "$DSN"
+}
+
+cmd_status() {
+  local mode
+  mode="$(detect_mode)"
+  log "mode: $mode"
+  log "dsn:  $DSN"
+  if ! curl -fsS "$DSN/healthz" >/dev/null 2>&1; then
+    log "healthz: NOT OK"
+    return 1
+  fi
+  log "healthz: ok"
+  /opt/venv/bin/python "$LIB/status.py" --url "$DSN"
+}
+
+cmd_reset() {
+  echo "WARNING: this destroys all collections at $DSN."
+  read -rp "Type 'destroy' to confirm: " confirm
+  if [ "$confirm" != "destroy" ]; then
+    log "aborted"
+    return 0
+  fi
+  /opt/venv/bin/python "$LIB/qdrant.py" delete-all-collections --url "$DSN"
+}
+
+cmd_seed() {
+  bash "$LIB/seed.sh" --url "$DSN" --csv "${DATA_LAYER_SOT_FIXTURE_CSV:-/a0/usr/workdir/MPG_DBSS_E2E_V03/MPG_DBSS_SOURCE_AUTHORITY_CONTROLLED_FIXTURE_v03.csv}"
+}
+
+case "${1:-help}" in
+  install) cmd_install ;;
+  verify)  cmd_verify ;;
+  status)  cmd_status ;;
+  reset)   cmd_reset ;;
+  seed)    cmd_seed ;;
+  help|--help|-h|"") usage ;;
+  *) echo "unknown subcommand: $1" >&2; usage >&2; exit 2 ;;
+esac

@@ -1,0 +1,37 @@
+{
+  "collection_name": "mpg_emails",
+  "vectors": {
+    "size": 768,
+    "distance": "Cosine"
+  },
+  "payload_schema": {
+    "message_id": "text",
+    "subject": "text",
+    "from_email": "text",
+    "to_emails": "text",
+    "cc_emails": "text",
+    "bcc_emails": "text",
+    "body": "text",
+    "received_at": "keyword",
+    "in_reply_to": "text",
+    "thread_id": "keyword",
+    "project_id": "keyword",
+    "agent_id": "keyword",
+    "external_ref": "text"
+  },
+  "hnsw_config": {
+    "m": 16,
+    "ef_construct": 100,
+    "full_scan_threshold": 10000
+  },
+  "optimizer_config": {
+    "indexing_threshold": 20000
+  },
+  "quantization_config": {
+    "scalar": {
+      "type": "int8",
+      "quantile": 0.99,
+      "always_ram": false
+    }
+  }
+}

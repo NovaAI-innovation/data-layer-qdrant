@@ -1,0 +1,48 @@
+# data-layer-qdrant — service configuration.
+# Mirrored into /qdrant/config/production.yaml inside the container.
+# Paths are absolute container paths; the same file works for the
+# native binary install if you swap them for host paths.
+
+service:
+  host: 0.0.0.0
+  http_port: 6333
+  grpc_port: 6334
+  enable_cors: true
+  max_request_size_mb: 32
+  max_workers: 0  # 0 = use available CPU count
+
+storage:
+  storage_path: /qdrant/storage
+  snapshots_path: /qdrant/snapshots
+  # Keep the last 3 snapshots per collection.
+  snapshots_config:
+    snapshots_path: /qdrant/snapshots
+    auto_snapshots: false  # manual only for production; can flip to true for backups
+  # WAL is colocated with storage by default; for high-write workloads
+  # consider moving to a separate volume.
+  wal:
+    wal_capacity_mb: 32
+    wal_segments_ahead: 0
+
+# Quantization and HNSW defaults sized for the all-mpnet-base-v2 embeddings.
+# Tune per workload; these are reasonable for ~774 corpus docs + ongoing email ingest.
+collection_defaults:
+  vectors:
+    size: 768
+    distance: Cosine
+  hnsw_config:
+    m: 16
+    ef_construct: 100
+    full_scan_threshold: 10000
+  optimizer_config:
+    indexing_threshold: 20000
+    memmap_threshold: null  # let Qdrant decide
+  quantization_config:
+    scalar:
+      type: int8
+      quantile: 0.99
+      always_ram: false
+
+telemetry_disabled: true
+
+service_debug: false

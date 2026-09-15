@@ -1,0 +1,47 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+*.so
+
+# Environments
+.venv/
+venv/
+.env
+.a0proj/secrets.env
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+
+# Agent runtime (FAISS memory + scaffold are per-developer-agent state, not source)
+.a0proj/memory/
+.a0proj/knowledge/fragments/
+.a0proj/knowledge/main/
+.a0proj/knowledge/solutions/
+.a0proj/skills/
+*.faiss
+*.faiss.sha256
+*.pkl
+embedding.json
+knowledge_import.json
+
+# Recursive .a0proj gitignore — runtime metadata regenerates on first load
+**/.a0proj/
+**/.a0proj/**
+
+# Submodule internals (this repo owns its own .git/)
+**/.git
+**/__pycache__
+
+# Local backups
+*.tar.gz
+*.bak
+*.snapshot
+
+# Local Qdrant data (when running natively; canonical path is /opt/qdrant/)
+/tmp/qdrant-*/
