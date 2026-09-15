@@ -19,7 +19,7 @@ curl -fsS "$URL/healthz" >/dev/null || fail "healthz failed"
 
 # 2) list collections + assert both expected exist (delegates to test_collections.py)
 log "test 2/5: list collections + schema check (test_collections.py)"
-/opt/venv/bin/python "$ROOT/tests/test_collections.py" --url "$URL" \n    || fail "collections check failed"
+/opt/venv/bin/python "$ROOT/tests/test_collections.py" --url "$URL" || fail "collections check failed"
 
 # 3) vector config — each collection must be 768-dim cosine
 log "test 3/5: per-collection vector config"
@@ -33,19 +33,26 @@ for coll in mpg_source_authority_documents mpg_emails; do
   printf '    %s  size=%s  distance=%s\n' "$coll" "$size" "$dist"
 done
 
-# 4) point count check (informational; may be 0 pre-seed)
+# 4) point count check (informational; may be 0 pre-seed).
+# /collections returns a brief shape that omits points_count + status,
+# so we fetch each collection individually.
 log "test 4/5: point counts (informational)"
-curl -fsS "$URL/collections" | /opt/venv/bin/python -c '
-import sys, json
-data = json.load(sys.stdin)
-for c in data.get("result", {}).get("collections", []):
-    print(f"    {c["name"]}: {c.get("points_count", 0)} points  status={c.get("status", "n/a")}")
-'
+for coll in mpg_source_authority_documents mpg_emails; do
+  resp="$(curl -fsS "$URL/collections/$coll" || echo "")"
+  if [ -n "$resp" ]; then
+    pts=$(echo "$resp" | python3 -c 'import sys,json; d=json.load(sys.stdin); print(d.get("result",{}).get("points_count",0))')
+    sts=$(echo "$resp" | python3 -c 'import sys,json; d=json.load(sys.stdin); print(d.get("result",{}).get("status","n/a"))')
+    printf '    %s: %s points  status=%s\n' "$coll" "$pts" "$sts"
+  else
+    printf '    %s: missing\n' "$coll"
+  fi
+done
 
 # 5) sample search probe — informational; zero-vector search returns
 # 0 hits, which we treat as a degraded-but-pass result.
 log "test 5/5: sample search probe"
-HITS=$(curl -fsS -X POST "$URL/collections/mpg_source_authority_documents/points/search" \n  -H "Content-Type: application/json" \n  -d '{"vector":[0.0]*768,"with_payload":true,"limit":3}' \n  | /opt/venv/bin/python -c '
+SEARCH_BODY=$(python3 -c 'import json; print(json.dumps({"vector":[0.0]*768,"with_payload":True,"limit":3}))')
+HITS=$(curl -fsS -X POST "$URL/collections/mpg_source_authority_documents/points/search" -H "Content-Type: application/json" -d "$SEARCH_BODY" | python3 -c '
 import sys, json
 d = json.load(sys.stdin)
 res = d.get("result", [])

@@ -1,6 +1,15 @@
 #!/usr/bin/env python3
-"""data-layer-qdrant/lib/status.py — print Qdrant version + collections."""
-import argparse, json, sys, urllib.request, urllib.error
+"""data-layer-qdrant/lib/status.py — print Qdrant version + collections.
+
+For each collection we fetch ``/collections/{name}`` because the
+``/collections`` list endpoint (1.19.x) returns only ``[{"name": "..."}]``
+and does NOT include ``points_count``, ``status``, or ``config``.
+"""
+import argparse
+import json
+import sys
+import urllib.error
+import urllib.request
 
 
 def http(url):
@@ -9,36 +18,58 @@ def http(url):
         return r.status, json.loads(body) if body else None
 
 
+def fetch(base, path):
+    try:
+        code, body = http(base + path)
+        return code, body
+    except urllib.error.URLError as e:
+        return 0, {"error": str(e)}
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--url", required=True)
     args = ap.parse_args()
     base = args.url.rstrip("/")
 
-    try:
-        code, body = http(base)
-        if code == 200 and isinstance(body, dict):
-            print(f"  qdrant version: {body.get('version', '?')}")
-    except urllib.error.URLError as e:
-        print(f"  /  ERR: {e}")
+    code, body = fetch(base, "/")
+    if code == 200 and isinstance(body, dict):
+        print("  qdrant version: " + str(body.get("version", "?")))
+    else:
+        print("  /  ERR: " + repr(body))
         return 1
 
-    try:
-        code, body = http(base + "/collections")
-    except urllib.error.URLError as e:
-        print(f"  /collections ERR: {e}")
-        return 1
-
+    code, body = fetch(base, "/collections")
     if code != 200 or not isinstance(body, dict):
-        print(f"  collections: ERR {code}")
+        print("  /collections ERR: " + repr(body))
         return 1
 
     cols = body.get("result", {}).get("collections", [])
     if not cols:
         print("  collections: (none)")
-    else:
-        for c in cols:
-            print(f"    - {c['name']}  points={c.get('points_count', 'n/a')}  status={c.get('status', 'n/a')}")
+        return 0
+
+    for c in cols:
+        name = c.get("name")
+        if not name:
+            continue
+        # Fetch the per-collection endpoint to get full info.
+        ccode, cbody = fetch(base, "/collections/" + name)
+        if ccode == 200 and isinstance(cbody, dict) and "result" in cbody:
+            r = cbody["result"]
+            print(
+                "    - " + name
+                + "  points=" + str(r.get("points_count", "n/a"))
+                + "  status=" + str(r.get("status", "n/a"))
+                + "  vectors.size=" + str(
+                    r.get("config", {}).get("params", {}).get("vectors", {}).get("size", "n/a")
+                )
+            )
+        else:
+            print(
+                "    - " + name
+                + "  points=n/a  status=n/a  (fetch failed)"
+            )
     return 0
 
 
