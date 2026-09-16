@@ -1,0 +1,40 @@
+Apache License, Version 2.0 (Apache-2.0)
+
+Copyright (c) 2026 Casey (data-layer wrapping)
+Copyright (c) 2026 Qdrant project contributors (upstream, per Apache-2.0)
+
+This `data-layer-qdrant` repository wraps Qdrant
+(https://github.com/qdrant/qdrant), which is distributed under the
+Apache License, Version 2.0 by its upstream copyright holders.
+
+For the binding canonical Apache-2.0 text, see:
+https://www.apache.org/licenses/LICENSE-2.0
+
+A copy of the Apache-2.0 license is also provided in this repository as
+the canonical reference. The wrapper code in this repository is licensed
+under Apache-2.0 per the terms reproduced at the URL above.
+
+Key obligations (summary; not legal advice — see the canonical URL above):
+
+  1. You must give any other recipients of the Work or Derivative Works a
+     copy of this License.
+
+  2. You must cause any modified files to carry prominent notices stating
+     that You changed the files.
+
+  3. You must retain, in the Source form of any Derivative Works that You
+     distribute, all copyright, patent, trademark, and attribution notices
+     from the Source form of the Work.
+
+  4. You may add Your own copyright statement to Your modifications and
+     may provide additional or different license terms and conditions for
+     use, reproduction, or distribution of Your modifications, provided
+     Your use otherwise complies with this License.
+
+  5. NO WARRANTY. Provided "AS IS" without warranty of any kind, express
+     or implied, including merchantability, fitness for a particular
+     purpose, and noninfringement.
+
+  6. Limitation of Liability. In no event shall any Contributor be liable
+     to You for any damages arising as a result of this License or out
+     of the use or inability to use the Work.
