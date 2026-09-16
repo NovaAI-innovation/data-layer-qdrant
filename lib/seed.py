@@ -93,7 +93,50 @@ def main():
             "imprecise point-count timing is acceptable."
         ),
     )
+    ap.add_argument(
+        "--embed",
+        choices=("auto", "on", "off"),
+        default="auto",
+        help=(
+            "Embedding mode. 'auto' = use the real sentence-transformers "
+            "encoder if DATA_LAYER_QDRANT_EMBED=1 AND sentence-transformers "
+            "is importable, else fall back to [0.0] * vector_dim "
+            "placeholders. 'on' = require the encoder (fail loudly if "
+            "missing). 'off' = always use placeholders."
+        ),
+    )
     args = ap.parse_args()
+
+    # Resolve embedding mode. Default is zero-vector placeholders (the
+    # historical behavior; smoke tests + ad-hoc ingestion still work
+    # without the 400MB sentence-transformers model installed).
+    use_embed = False
+    encoder = None
+    if args.embed == "on":
+        use_embed = True
+    elif args.embed == "auto":
+        use_embed = os.environ.get("DATA_LAYER_QDRANT_EMBED", "") == "1"
+    if use_embed:
+        try:
+            from embed import get_encoder  # type: ignore
+            encoder = get_encoder()
+            log("embed mode: ON (sentence-transformers/all-mpnet-base-v2)")
+        except Exception as e:
+            if args.embed == "on":
+                fail("embed=on but encoder unavailable: " + str(e))
+            log(
+                "embed mode: requested but encoder unavailable "
+                "(" + str(e) + "); falling back to [0.0] * "
+                + str(args.vector_dim) + " placeholders"
+            )
+            use_embed = False
+            encoder = None
+    if not use_embed:
+        log(
+            "embed mode: OFF (placeholder zero-vectors; set "
+            "DATA_LAYER_QDRANT_EMBED=1 + pip install "
+            "sentence-transformers to enable real embeddings)"
+        )
 
     put_url = (
         args.url.rstrip("/")
@@ -123,7 +166,13 @@ def main():
                 + (row.get("source_family") or "")
             )
             pid = hashlib.md5(sha.encode()).hexdigest()
-            vec = [0.0] * args.vector_dim
+            if use_embed:
+                # source_text is the human-readable concatenation of
+                # relative_path + source_family (set at lines 120-124
+                # above). The encoder produces 768-dim cosine vectors.
+                vec = encoder.encode(payload["source_text"])
+            else:
+                vec = [0.0] * args.vector_dim
             batch.append({"id": pid, "vector": vec, "payload": payload})
             uploaded += 1
             if len(batch) >= args.batch_size:
