@@ -6,7 +6,7 @@ FROM qdrant/qdrant:v1.19.1
 
 # Use bash for the entrypoint (Qdrant's image is debian-based with bash available).
 RUN apt-get update -qq \
- && apt-get install -y --no-install-recommends bash curl ca-certificates python3-minimal \
+ && apt-get install -y --no-install-recommends bash curl ca-certificates python3 \
  && rm -rf /var/lib/apt/lists/* \
  && mkdir -p /qdrant/config /qdrant/migrations /qdrant/seeds /qdrant/storage /qdrant/snapshots
 
